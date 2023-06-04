@@ -6,7 +6,7 @@ from torch.optim import Adam
 import wandb
 
 # Initialize W&B
-wandb.init(project='supervised vision transformer')
+wandb.init(project='vision-transformer-cifar10')
 
 # Load the Vision Transformer model
 model = torch.hub.load('facebookresearch/dino:main', 'dino_vits16', pretrained=False)
@@ -48,9 +48,8 @@ num_epochs = 10
 
 for epoch in range(num_epochs):
     model.train()
-    train_loss = 0.0
 
-    for images, labels in train_loader:
+    for batch_idx, (images, labels) in enumerate(train_loader):
         images = images.to(device)
         labels = labels.to(device)
 
@@ -63,10 +62,8 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
 
-        train_loss += loss.item() * images.size(0)
-
-    # Compute the average training loss for the epoch
-    train_loss /= len(train_dataset)
+        # Log the loss after every batch
+        wandb.log({"train_loss": loss.item()})
 
     # Validation loop
     model.eval()
@@ -94,12 +91,11 @@ for epoch in range(num_epochs):
         val_loss /= len(val_dataset)
         val_accuracy = correct / total
 
-    # Log metrics to Weights & Biases
-    wandb.log({"train_loss": train_loss, "val_loss": val_loss, "val_accuracy": val_accuracy})
+    # Log validation metrics after each epoch
+    wandb.log({"val_loss": val_loss, "val_accuracy": val_accuracy})
 
     # Print training and validation metrics for the epoch
     print(f"Epoch [{epoch+1}/{num_epochs}]\t"
-          f"Train Loss: {train_loss:.4f}\t"
           f"Val Loss: {val_loss:.4f}\t"
           f"Val Accuracy: {val_accuracy:.4f}")
 
