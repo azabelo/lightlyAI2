@@ -6,7 +6,7 @@ from torch.optim import Adam
 import wandb
 
 # Initialize W&B
-wandb.init(project='vision-transformer-cifar10')
+wandb.init(project='supervised VIT')
 
 # Load the Vision Transformer model
 model = torch.hub.load('facebookresearch/dino:main', 'dino_vits16', pretrained=False)
@@ -25,7 +25,7 @@ val_size = len(cifar10) - train_size
 train_dataset, val_dataset = torch.utils.data.random_split(cifar10, [train_size, val_size])
 
 # Define the data loaders
-batch_size = 64
+batch_size = 32
 train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
@@ -33,7 +33,7 @@ val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shu
 criterion = nn.CrossEntropyLoss()
 
 # Define the optimizer
-optimizer = Adam(model.parameters(), lr=1e-4)
+optimizer = Adam(model.parameters(), lr=1e-5)
 
 # Move the model to the GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -41,7 +41,7 @@ model.to(device)
 
 # Track the model and the hyperparameters
 wandb.watch(model)
-wandb.config.update({"learning_rate": 1e-4, "batch_size": batch_size})
+wandb.config.update({"learning_rate": 1e-5, "batch_size": batch_size})
 
 # Training loop
 num_epochs = 10
