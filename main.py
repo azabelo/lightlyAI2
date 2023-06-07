@@ -1,14 +1,7 @@
-# Note: The model and training settings do not follow the reference settings
-# from the paper. The settings are chosen such that the example can easily be
-# run on a small dataset with a single GPU.
-
 import copy
-
-import torch
 import torchvision
 from torch import nn
 import torchvision.transforms as transforms
-
 from lightly.data import LightlyDataset
 from lightly.data.multi_view_collate import MultiViewCollate
 from lightly.loss import DINOLoss
@@ -27,7 +20,6 @@ if __name__ == '__main__':
     transform = transforms.Compose(
         [transforms.ToTensor(),  # Converts PIL image or numpy.ndarray to torch.Tensor
          transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])  # Normalize the image tensor
-
 
     class DINO(torch.nn.Module):
         def __init__(self, backbone, input_dim):
@@ -51,38 +43,10 @@ if __name__ == '__main__':
             z = self.teacher_head(y)
             return z
 
-
-    # from nanoViT.src import model
-    # from nanoViT.src.model import VisionTransformer
-    #
-    # # pretrained model params
-    # custom_config = {
-    #     "img_size": 32,
-    #     "in_chans": 3,
-    #     "patch_size": 8,
-    #     "embed_dim": 64,
-    #     "depth": 1,
-    #     "n_heads": 1,
-    #     "qkv_bias": True,
-    #     "mlp_ratio": 4,
-    # }
-    #
-    # backbone = VisionTransformer(**custom_config)
-    # print(type(backbone))
-
-
-    #
-    # resnet = torchvision.models.resnet18()
-    # backbone = nn.Sequential(*list(resnet.children())[:-1])
-    input_dim = 32
-    # instead of a resnet you can also use a vision transformer backbone as in the
-    # original paper (you might have to reduce the batch size in this case):
-
     backbone = torch.hub.load('facebookresearch/dino:main', 'dino_vits16', pretrained=False)
     input_dim = backbone.embed_dim
+    print(input_dim)
     print(type(backbone))
-
-
     model = DINO(backbone, input_dim)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -90,20 +54,11 @@ if __name__ == '__main__':
 
     cifar10 = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
     print(type(cifar10))
+    print(cifar10[0][0].shape)
 
-    # # we ignore object detection annotations by setting target_transform to return 0
-    # pascal_voc = torchvision.datasets.VOCDetection(
-    #     "datasets/pascal_voc", download=True, target_transform=lambda t: 0
-    # )
-
-
-
-    transform = DINOTransform(global_crop_size=32)
+    transform = DINOTransform(global_crop_size=32)#, local_crop_size=16)
     dataset = LightlyDataset.from_torch_dataset(cifar10, transform=transform)
-
     print(type(dataset))
-    # or create a dataset from a folder containing images or videos:
-    # dataset = LightlyDataset("path/to/folder")
 
     collate_fn = MultiViewCollate()
 
@@ -125,7 +80,7 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
-    epochs = 0
+    epochs = 10
 
     print("Starting Training")
     for epoch in range(epochs):
@@ -170,6 +125,8 @@ if __name__ == '__main__':
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))  # Normalize the image
     ])
 
+    cifar10 = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+
     # Split the dataset into train and validation sets
     train_size = int(0.8 * len(cifar10))
     val_size = len(cifar10) - train_size
@@ -199,8 +156,10 @@ if __name__ == '__main__':
 
     for epoch in range(num_epochs):
         model.train()
-
+        batchcount = 0
         for batch_idx, (images, labels) in enumerate(train_loader):
+            batchcount += 1
+            print("batchcount: ", batchcount , " / ", len(train_loader))
             images = images.to(device)
             labels = labels.to(device)
 

@@ -25,7 +25,7 @@ val_size = len(cifar10) - train_size
 train_dataset, val_dataset = torch.utils.data.random_split(cifar10, [train_size, val_size])
 
 # Define the data loaders
-batch_size = 32
+batch_size = 1
 train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
