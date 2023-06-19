@@ -83,7 +83,7 @@ def train(config=None):
        # wandb.config.update({"learning_rate": 1e-5, "batch_size": batch_size})
 
         # Training loop
-        num_epochs = 1
+        num_epochs = 30
         print("batch count: ", len(train_loader))
         for epoch in range(num_epochs):
             model.train()
@@ -150,39 +150,56 @@ def train(config=None):
             torch.save(model.state_dict(), file)
             print("saved model state at epoch ", epoch)
 
-# Initialize W&B
-#wandb.init(project='supervised VIT (sweep)')
 
-# Define the hyperparameters for grid search
-batch_sizes = [16, 32, 64]
-optimizers = ['Adam', 'SGD']
-learning_rates = [1e-4, 1e-5, 1e-6]
-augmentations = [True, False]
 
-# Define the sweep configuration
-sweep_config = {
-    'method': 'grid',
-    'metric': {'name': 'val_accuracy', 'goal': 'maximize'},
-    'parameters': {
-        'batch_size': {
-            'values': batch_sizes
-        },
-        'optimizer': {
-            'values': optimizers
-        },
-        'learning_rate': {
-            'values': learning_rates
-        }
-        ,
-        'augmentations': {
-            'values': augmentations
+def grid_search():
+    # Define the hyperparameters for grid search
+    batch_sizes = [16, 32, 64]
+    optimizers = ['Adam', 'SGD']
+    learning_rates = [1e-4, 1e-5, 1e-6]
+    augmentations = [True, False]
+
+    # Define the sweep configuration
+    sweep_config = {
+        'method': 'grid',
+        'metric': {'name': 'val_accuracy', 'goal': 'maximize'},
+        'parameters': {
+            'batch_size': {
+                'values': batch_sizes
+            },
+            'optimizer': {
+                'values': optimizers
+            },
+            'learning_rate': {
+                'values': learning_rates
+            }
+            ,
+            'augmentations': {
+                'values': augmentations
+            }
         }
     }
-}
 
-sweep_id = wandb.sweep(sweep_config)
-wandb.agent(sweep_id, function=train)
+    sweep_id = wandb.sweep(sweep_config)
+    wandb.agent(sweep_id, function=train)
+
+    # Finish the run
+    wandb.finish()
+
+def train_once():
+    config = {
+        'batch_size': 32,
+        'learning_rate': 1e-4,
+        'optimizer': 'Adam',
+        'augmentations': False
+    }
+
+    # Initialize wandb
+    wandb.init(project='my-project', config=config)
+    train(config)
+
+    # Finish the run
+    wandb.finish()
 
 
-# Finish the run
-wandb.finish()
+train_once()
