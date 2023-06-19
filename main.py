@@ -9,6 +9,7 @@ from lightly.models.modules import DINOProjectionHead
 from lightly.models.utils import deactivate_requires_grad, update_momentum
 from lightly.transforms.dino_transform import DINOTransform
 from lightly.utils.scheduler import cosine_schedule
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch
 import wandb
 from torch.optim import Adam
@@ -18,7 +19,8 @@ if __name__ == '__main__':
 
     # Define the data transformation
     transform = transforms.Compose(
-        [transforms.ToTensor(),  # Converts PIL image or numpy.ndarray to torch.Tensor
+        [transforms.Resize((224,224)),
+         transforms.ToTensor(),  # Converts PIL image or numpy.ndarray to torch.Tensor
          transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])  # Normalize the image tensor
 
     class DINO(torch.nn.Module):
@@ -26,10 +28,10 @@ if __name__ == '__main__':
             super().__init__()
             self.student_backbone = backbone
             self.student_head = DINOProjectionHead(
-                input_dim, 128, 64, 32, freeze_last_layer=1
+                input_dim, 512, 256, 32, freeze_last_layer=1
             )
             self.teacher_backbone = copy.deepcopy(backbone)
-            self.teacher_head = DINOProjectionHead(input_dim, 128, 64, 32)
+            self.teacher_head = DINOProjectionHead(input_dim, 512, 256, 32)
             deactivate_requires_grad(self.teacher_backbone)
             deactivate_requires_grad(self.teacher_head)
 
@@ -43,20 +45,20 @@ if __name__ == '__main__':
             z = self.teacher_head(y)
             return z
 
-    backbone = torch.hub.load('facebookresearch/dino:main', 'dino_vits16', pretrained=False)
+    backbone = torch.hub.load('facebookresearch/dino:main', 'dino_vits16', pretrained=True)
     input_dim = backbone.embed_dim
-    print(input_dim)
-    print(type(backbone))
     model = DINO(backbone, input_dim)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
 
+    print(model)
+
     cifar10 = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
     print(type(cifar10))
     print(cifar10[0][0].shape)
 
-    transform = DINOTransform(global_crop_size=32)#, local_crop_size=16)
+    transform = DINOTransform(global_crop_size=196, local_crop_size=64)
     dataset = LightlyDataset.from_torch_dataset(cifar10, transform=transform)
     print(type(dataset))
 
@@ -64,7 +66,7 @@ if __name__ == '__main__':
 
     dataloader = torch.utils.data.DataLoader(
         dataset,
-        batch_size=1,
+        batch_size=64,
         collate_fn=collate_fn,
         shuffle=True,
         drop_last=True,
@@ -78,10 +80,18 @@ if __name__ == '__main__':
     # move loss to correct device because it also contains parameters
     criterion = criterion.to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    # Define the optimizer
+    optimizer = Adam(model.parameters(), lr=1e-4)
 
-    epochs = 10
+    # define the lr scheduler
+    scheduler = ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=3, verbose=False)
 
+    # Initialize W&B
+    wandb.init(project='unsupervised-pretraining')
+    # Track the model and the hyperparameters
+    wandb.watch(model)
+
+    epochs = 30
     print("Starting Training")
     for epoch in range(epochs):
         total_loss = 0
@@ -99,6 +109,10 @@ if __name__ == '__main__':
             teacher_out = [model.forward_teacher(view) for view in global_views]
             student_out = [model.forward(view) for view in views]
             loss = criterion(teacher_out, student_out, epoch=epoch)
+
+            # Log the loss after every batch
+            wandb.log({"train_loss": loss})
+
             total_loss += loss.detach()
             loss.backward()
             # We only cancel gradients of student head.
@@ -109,13 +123,22 @@ if __name__ == '__main__':
         avg_loss = total_loss / len(dataloader)
         print(f"epoch: {epoch:>02}, loss: {avg_loss:.5f}")
 
+        scheduler.step(avg_loss)
 
+        # checkpointing our model
+        file = "unsupervised_pretraining/epoch" + str(epoch)
+        torch.save(model.state_dict(), file)
+        print("saved model state at epoch ", epoch)
 
-    #now that we've finished pretraining, lets train it to classify the images
+    # Finish the run
+    wandb.finish()
+
+    #now that we've finished pretraining the model, train it to classify the images
 
     #also make a new wandb project
     # Initialize W&B
     wandb.init(project='unsupervised-pretrained-VIT')
+
 
     pretrained_model = model.teacher_backbone
 
@@ -149,7 +172,6 @@ if __name__ == '__main__':
 
     # Track the model and the hyperparameters
     wandb.watch(model)
-    wandb.config.update({"learning_rate": 1e-5, "batch_size": batch_size})
 
     # Training loop
     num_epochs = 10
