@@ -91,7 +91,7 @@ if __name__ == '__main__':
     # Track the model and the hyperparameters
     wandb.watch(model)
 
-    epochs = 30
+    epochs = 0
     print("Starting Training")
     for epoch in range(epochs):
         total_loss = 0
@@ -141,6 +141,12 @@ if __name__ == '__main__':
 
 
     pretrained_model = model.teacher_backbone
+    print(type(pretrained_model))
+    print(pretrained_model)
+    print("done")
+
+    #as long as it works till here, the rest we've alr coded in supervisedVIT.py file
+
 
     # Create the CIFAR-10 dataset
     transform = transforms.Compose([
