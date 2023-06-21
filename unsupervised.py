@@ -40,15 +40,13 @@ class DINO(torch.nn.Module):
 
 def pretrain():
 
-    #should we rid this line?
    # torch.multiprocessing.freeze_support()
 
-    # Define the data transformation (got rid of mean and std normalization)
+    # Define the data transformation (not sure if normalization helps)
     transform = transforms.Compose(
         [transforms.Resize((224,224)),
          transforms.ToTensor(),
          transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])])
-
 
     backbone = torch.hub.load('facebookresearch/dino:main', 'dino_vits16', pretrained=False)
     input_dim = backbone.embed_dim
@@ -58,10 +56,8 @@ def pretrain():
     model.to(device)
 
     cifar10 = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
-
     crop_transform = DINOTransform(global_crop_size=196, local_crop_size=64)
     dataset = LightlyDataset.from_torch_dataset(cifar10, transform=crop_transform)
-    print(type(dataset))
 
     collate_fn = MultiViewCollate()
 
@@ -92,6 +88,7 @@ def pretrain():
     # Track the model and the hyperparameters
     wandb.watch(model)
 
+    #DINO pretraining
     epochs = 10
     print("Starting Training")
     for epoch in range(epochs):
@@ -133,6 +130,7 @@ def pretrain():
 
     # Finish the run
     wandb.finish()
+   #we need to reactivate requires grad to perform supervised backpropagation later
     activate_requires_grad(model.teacher_backbone)
     return model.teacher_backbone
 
@@ -177,8 +175,6 @@ def create_datasets(config=None):
     return train_loader, val_loader
 
 def train(model=None, config=None):
-    # pretrained model is given to us so we dont need this
-    #model = torch.hub.load('facebookresearch/dino:main', 'dino_vits16', pretrained=False)
 
     # Initialize a new wandb run
     with wandb.init(config=config):

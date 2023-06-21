@@ -202,4 +202,5 @@ def train_once():
     wandb.finish()
 
 
+#grid_search()
 train_once()
