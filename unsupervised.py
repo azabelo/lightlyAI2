@@ -6,7 +6,7 @@ from lightly.data import LightlyDataset
 from lightly.data.multi_view_collate import MultiViewCollate
 from lightly.loss import DINOLoss
 from lightly.models.modules import DINOProjectionHead
-from lightly.models.utils import deactivate_requires_grad, update_momentum
+from lightly.models.utils import deactivate_requires_grad, update_momentum, activate_requires_grad
 from lightly.transforms.dino_transform import DINOTransform
 from lightly.utils.scheduler import cosine_schedule
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -21,10 +21,10 @@ class DINO(torch.nn.Module):
         super().__init__()
         self.student_backbone = backbone
         self.student_head = DINOProjectionHead(
-            input_dim, 512, 256, 32, freeze_last_layer=1
+            input_dim, 512, 64, 2048, freeze_last_layer=1
         )
         self.teacher_backbone = copy.deepcopy(backbone)
-        self.teacher_head = DINOProjectionHead(input_dim, 512, 256, 32)
+        self.teacher_head = DINOProjectionHead(input_dim, 512, 64, 2048)
         deactivate_requires_grad(self.teacher_backbone)
         deactivate_requires_grad(self.teacher_head)
 
@@ -41,12 +41,13 @@ class DINO(torch.nn.Module):
 def pretrain():
 
     #should we rid this line?
-    torch.multiprocessing.freeze_support()
+   # torch.multiprocessing.freeze_support()
 
     # Define the data transformation (got rid of mean and std normalization)
     transform = transforms.Compose(
         [transforms.Resize((224,224)),
-         transforms.ToTensor()])
+         transforms.ToTensor(),
+         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])])
 
 
     backbone = torch.hub.load('facebookresearch/dino:main', 'dino_vits16', pretrained=False)
@@ -58,7 +59,7 @@ def pretrain():
 
     cifar10 = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
 
-    crop_transform = DINOTransform(global_crop_size=196, local_crop_size=112)
+    crop_transform = DINOTransform(global_crop_size=196, local_crop_size=64)
     dataset = LightlyDataset.from_torch_dataset(cifar10, transform=crop_transform)
     print(type(dataset))
 
@@ -66,7 +67,7 @@ def pretrain():
 
     dataloader = torch.utils.data.DataLoader(
         dataset,
-        batch_size=64,
+        batch_size=32,
         collate_fn=collate_fn,
         shuffle=True,
         drop_last=True,
@@ -74,7 +75,7 @@ def pretrain():
     )
 
     criterion = DINOLoss(
-        output_dim=32,
+        output_dim=2048,
         warmup_teacher_temp_epochs=5,
     )
     # move loss to correct device because it also contains parameters
@@ -84,24 +85,24 @@ def pretrain():
     optimizer = Adam(model.parameters(), lr=1e-4)
 
     # define the lr scheduler
-    scheduler = ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=3, verbose=False)
+    scheduler = ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=2, verbose=False)
 
     # Initialize W&B
     wandb.init(project='unsupervised-pretraining')
     # Track the model and the hyperparameters
     wandb.watch(model)
 
-    epochs = 0
+    epochs = 10
     print("Starting Training")
     for epoch in range(epochs):
         total_loss = 0
         momentum_val = cosine_schedule(epoch, epochs, 0.996, 1)
-        print("here")
-        print(len(dataloader))
+        print("epoch: ", epoch)
         count = 0
         for views, _, _ in dataloader:
             count += 1
-            print(count)
+            if count%100 == 0:
+                print(count)
             update_momentum(model.student_backbone, model.teacher_backbone, m=momentum_val)
             update_momentum(model.student_head, model.teacher_head, m=momentum_val)
             views = [view.to(device) for view in views]
@@ -132,8 +133,7 @@ def pretrain():
 
     # Finish the run
     wandb.finish()
-
-    #return pretrained model
+    activate_requires_grad(model.teacher_backbone)
     return model.teacher_backbone
 
 
@@ -142,6 +142,7 @@ def create_datasets(config=None):
     train_transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Resize((224, 224)),
+        #transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     ])
     if config.augmentations:
         train_transform = transforms.Compose([
@@ -198,7 +199,7 @@ def train(model=None, config=None):
             optimizer = SGD(model.parameters(), lr=learning_rate)
 
         #define the lr scheduler
-        scheduler = ReduceLROnPlateau(optimizer, mode="min", factor = 0.1, patience=3, verbose=True)
+        scheduler = ReduceLROnPlateau(optimizer, mode="min", factor = 0.1, patience=2, verbose=True)
 
         # Move the model to the GPU if available
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -208,7 +209,7 @@ def train(model=None, config=None):
         wandb.watch(model)
 
         # Training loop
-        num_epochs = 0
+        num_epochs = 20
         print("batch count: ", len(train_loader))
         for epoch in range(num_epochs):
             model.train()
@@ -292,7 +293,6 @@ def train_once(model):
 
     # Finish the run
     wandb.finish()
-
 
 
 pretrained_model = pretrain()
