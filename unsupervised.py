@@ -15,6 +15,7 @@ import wandb
 from torch.optim import Adam
 from torch.optim import SGD
 import sys
+import os
 
 
 class DINO(torch.nn.Module):
@@ -290,6 +291,7 @@ def train_model(model, config):
 
 if __name__ == "__main__":
 
+
     unsupervised_config = {
         'batch_size': int(sys.argv[1]),
         'learning_rate': float(sys.argv[2]),
@@ -302,5 +304,6 @@ if __name__ == "__main__":
         'augmentations': False
     }
 
+    os.makedirs("unsupervised_pretraining")
     pretrained_model = pretrain(unsupervised_config)
     train_model(pretrained_model, supervised_config)
