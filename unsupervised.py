@@ -43,11 +43,12 @@ def pretrain():
    # torch.multiprocessing.freeze_support()
 
     # Define the data transformation (not sure if normalization helps)
-    transform = transforms.Compose(
-        [transforms.Resize((224,224)),
-         transforms.ToTensor(),
-         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])])
+    # transform = transforms.Compose(
+    #     [transforms.Resize((224,224)),
+    #      transforms.ToTensor(),
+    #      transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])])
 
+    transform = DINOTransform()
     backbone = torch.hub.load('facebookresearch/dino:main', 'dino_vits16', pretrained=False)
     input_dim = backbone.embed_dim
     model = DINO(backbone, input_dim)
@@ -78,10 +79,10 @@ def pretrain():
     criterion = criterion.to(device)
 
     # Define the optimizer
-    optimizer = Adam(model.parameters(), lr=1e-4)
+    optimizer = Adam(model.parameters(), lr=1e-6)
 
     # define the lr scheduler
-    scheduler = ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=2, verbose=False)
+    #scheduler = ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=2, verbose=False)
 
     # Initialize W&B
     wandb.init(project='unsupervised-pretraining')
@@ -89,7 +90,7 @@ def pretrain():
     wandb.watch(model)
 
     #DINO pretraining
-    epochs = 10
+    epochs = 15
     print("Starting Training")
     for epoch in range(epochs):
         total_loss = 0
@@ -121,11 +122,11 @@ def pretrain():
         avg_loss = total_loss / len(dataloader)
         print(f"epoch: {epoch:>02}, loss: {avg_loss:.5f}")
 
-        scheduler.step(avg_loss)
+        #scheduler.step(avg_loss)
 
         # checkpointing our model
-        file = "unsupervised_pretraining/epoch" + str(epoch)
-        torch.save(model.state_dict(), file)
+        file = "unsupervised_pretraining/loss" + str(avg_loss)
+        torch.save(model.teacher_backbone.state_dict(), file)
         print("saved model state at epoch ", epoch)
 
     # Finish the run
@@ -278,7 +279,7 @@ def train_once(model):
 
     config = {
         'batch_size': 32,
-        'learning_rate': 1e-4,
+        'learning_rate': 1e-5,
         'optimizer': 'Adam',
         'augmentations': False
     }
@@ -292,4 +293,7 @@ def train_once(model):
 
 
 pretrained_model = pretrain()
+
+# model = torch.hub.load('facebookresearch/dino:main', 'dino_vits16', pretrained=False)
+# pretrained_model = model.load_state_dict(torch.load("unsupervised_pretraining/losstensor(3.9870, device='cuda:0')"))
 train_once(pretrained_model)
