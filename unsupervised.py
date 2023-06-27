@@ -86,7 +86,7 @@ def pretrain(config=None):
     optimizer = Adam(model.parameters(), lr=learning_rate)
 
     # define the lr scheduler
-    #scheduler = ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=2, verbose=False)
+    scheduler = ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=2, verbose=False)
 
     # Initialize W&B
     wandb.init(project='unsupervised-pretraining')
@@ -126,12 +126,15 @@ def pretrain(config=None):
         avg_loss = total_loss / len(dataloader)
         print(f"epoch: {epoch:>02}, loss: {avg_loss:.5f}")
 
-        #scheduler.step(avg_loss)
+        scheduler.step(avg_loss)
 
         # checkpointing our model
-        file = "unsupervised_pretraining/loss" + str(avg_loss)
-        torch.save(model.teacher_backbone.state_dict(), file)
-        print("saved model state at epoch ", epoch)
+        try:
+            file = "unsupervised_pretraining/loss" + str(avg_loss)
+            torch.save(model.teacher_backbone.state_dict(), file)
+            print("saved model state at epoch ", epoch)
+        except:
+            pass
 
     # Finish the run
     wandb.finish()
@@ -273,8 +276,11 @@ def train(model=None, config=None):
 
             scheduler.step(val_loss)
             # checkpointing our model
-            file = "supervisedVIT_untrained_epoch" + str(epoch)
-            torch.save(model.state_dict(), file)
+            try:
+                file = "supervisedVIT_untrained/epoch" + str(epoch)
+                torch.save(model.state_dict(), file)
+            except:
+                pass
             print("saved model state at epoch ", epoch)
 
 
@@ -305,5 +311,7 @@ if __name__ == "__main__":
     }
 
     os.makedirs("unsupervised_pretraining")
+    os.makedirs("supervisedVIT_untrained")
+
     pretrained_model = pretrain(unsupervised_config)
     train_model(pretrained_model, supervised_config)
