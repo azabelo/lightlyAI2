@@ -161,7 +161,7 @@ def create_datasets(config=None):
     # Create the CIFAR-10 dataset
     train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=train_transform)
     val_dataset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=val_transform)
-    print("train size: ", len(train_dataset), "val size: ", len(val_dataset))
+    print("train size: ", len(train_dataset), "validation size: ", len(val_dataset))
 
     # image, _ = train_dataset[0]
     # image_np = image.permute(1,2,0).numpy()
