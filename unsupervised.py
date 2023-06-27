@@ -14,6 +14,7 @@ import torch
 import wandb
 from torch.optim import Adam
 from torch.optim import SGD
+import sys
 
 
 class DINO(torch.nn.Module):
@@ -38,7 +39,7 @@ class DINO(torch.nn.Module):
         z = self.teacher_head(y)
         return z
 
-def pretrain():
+def pretrain(config=None):
 
    # torch.multiprocessing.freeze_support()
 
@@ -62,9 +63,10 @@ def pretrain():
 
     collate_fn = MultiViewCollate()
 
+    batch_size = config["batch_size"]
     dataloader = torch.utils.data.DataLoader(
         dataset,
-        batch_size=32,
+        batch_size=batch_size,
         collate_fn=collate_fn,
         shuffle=True,
         drop_last=True,
@@ -79,7 +81,8 @@ def pretrain():
     criterion = criterion.to(device)
 
     # Define the optimizer
-    optimizer = Adam(model.parameters(), lr=1e-6)
+    learning_rate = config["learning_rate"]
+    optimizer = Adam(model.parameters(), lr=learning_rate)
 
     # define the lr scheduler
     #scheduler = ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=2, verbose=False)
@@ -274,15 +277,8 @@ def train(model=None, config=None):
             print("saved model state at epoch ", epoch)
 
 
-def train_once(model):
+def train_model(model, config):
     print("starting supervised training")
-
-    config = {
-        'batch_size': 32,
-        'learning_rate': 1e-5,
-        'optimizer': 'Adam',
-        'augmentations': False
-    }
 
     # Initialize wandb
     wandb.init(project='pretrained', config=config)
@@ -292,8 +288,19 @@ def train_once(model):
     wandb.finish()
 
 
-pretrained_model = pretrain()
+if __name__ == "__main__":
 
-# model = torch.hub.load('facebookresearch/dino:main', 'dino_vits16', pretrained=False)
-# pretrained_model = model.load_state_dict(torch.load("unsupervised_pretraining/losstensor(3.9870, device='cuda:0')"))
-train_once(pretrained_model)
+    unsupervised_config = {
+        'batch_size': int(sys.argv[1]),
+        'learning_rate': float(sys.argv[2]),
+    }
+
+    supervised_config = {
+        'batch_size': int(sys.argv[3]),
+        'learning_rate': float(sys.argv[4]),
+        'optimizer': 'Adam',
+        'augmentations': False
+    }
+
+    pretrained_model = pretrain(unsupervised_config)
+    train_model(pretrained_model, supervised_config)
